@@ -8,7 +8,8 @@ function RoomPage() {
     const { peer, createOffer, createAnswer, setRemoteAnswer, sendStream, remoteStream } = usePeer();
     const [myStream, setMyStream] = useState();
     const videoRef = useRef(null);
-    const remoteStreamRef = useRef();
+    const remoteStreamRef = useRef(null);
+    const remoteEmailRef = useRef(null);
 
     useEffect(() => {
         if (videoRef.current && myStream) {
@@ -22,21 +23,38 @@ function RoomPage() {
         }
     }, [remoteStream]);
 
+    useEffect(() => {
+        const handleNegotiation = async () => {
+            if (remoteEmailRef.current) {
+                const offer = await createOffer();
+                socket.emit("call-user", { emailId: remoteEmailRef.current, offer });
+            }
+        };
+        peer.addEventListener("negotiationneeded", handleNegotiation);
+        return () => {
+            peer.removeEventListener("negotiationneeded", handleNegotiation);
+        };
+    }, [peer, createOffer, socket]);
+
     const handleNewUserJoin = useCallback(async (data) => {
         const { emailId } = data;
         console.log(`New joined user : ${emailId}`);
+        remoteEmailRef.current = emailId;
 
-        const offer = await createOffer()
-        socket.emit("call-user", { emailId, offer });
-    }, [createOffer, socket]);
+        if (myStream) {
+            const offer = await createOffer()
+            socket.emit("call-user", { emailId, offer });
+        }
+    }, [createOffer, socket, myStream]);
 
     const handleIncomingCall = useCallback(async (data) => {
         const { from, offer } = data;
         console.log("incoming call from", from, offer);
+        remoteEmailRef.current = from;
 
         const ans = await createAnswer(offer);
         socket.emit("call-accept", { emailId: from, ans });
-    }, []);
+    }, [createAnswer, socket]);
 
     const handleCallAccept = useCallback(async (data) => {
         const { ans } = data;
@@ -49,7 +67,7 @@ function RoomPage() {
             audio: true,
             video: true
         });
-        // sendStream(stream);
+        sendStream(stream);
         setMyStream(stream);
     }, []);
 
@@ -73,10 +91,22 @@ function RoomPage() {
     return (
         <div>
             <h1>Room Page</h1>
-            <button onClick={() => sendStream(myStream)}>send my video</button>
-            {myStream && <video ref={videoRef} autoPlay muted playsInline style={{ width: '400px', borderRadius: '10px' }} />}
-            {remoteStream && <video ref={remoteStreamRef} autoPlay playsInline style={{ width: '400px', borderRadius: '10px' }} />}
+            <div style={{
+                display: "flex",
+                justifyContent: "space-around",
+                width: "100vw"
+            }}>
+                <div>
+                    <h1>My video</h1>
+                    {myStream && <video ref={videoRef} autoPlay muted playsInline style={{ width: '400px' }} />}
 
+                </div>
+                <div>
+                    <h1>Remote stream</h1>
+                    {<video ref={remoteStreamRef} autoPlay playsInline style={{ width: '400px', borderRadius: '10px' }} />}
+
+                </div>
+            </div>
         </div>
     )
 }
